@@ -7,6 +7,7 @@ Custom C++ Arduino firmware for the Realtek AMB82-Mini microcontroller. This pro
 *   **Zero-Delay Booting:** The camera pipeline and RTSP server initialize in under a second (`<160us`). Blocking boot delays have been eliminated to ensure immediate stream availability after a power cycle.
 *   **WPA3 & PMF Compatibility:** Fully compatible with modern router security standards. The firmware successfully negotiates SAE authentication and Protected Management Frames (PMF) on 5GHz/2.4GHz networks.
 *   **Passive Network Watchdog:** Relies on the Realtek SDK's internal auto-reconnect for minor signal drops, but enforces a strict 90-second timeout. If the WPA3 PMKSA cache locks up, the watchdog automatically executes a soft-reboot to clear the hardware RAM and restore the connection.
+*   **Socket Persistence:** The RTSP and HTTP sockets bind to all available interfaces (`0.0.0.0`) and intentionally survive brief Wi-Fi disconnects. The firmware explicitly avoids re-binding sockets during an auto-recovery to prevent fatal LwIP port-collision crashes.
 *   **Dynamic OTA Preparation:** Safely frees DMA memory for incoming firmware updates via a web endpoint, tearing down the video pipeline without requiring a time-consuming reboot sequence.
 *   **Auto-Generating Versioning:** Uses C++ compiler macros (`__DATE__` and `__TIME__`) to automatically generate a unique, timestamped firmware version upon compilation, making successful OTA updates instantly verifiable.
 *   **Custom Hostname:** Registers gracefully on the network as `AMB82-Mini` instead of the generic Realtek `lwip0` identifier.
@@ -23,18 +24,21 @@ The firmware hosts a lightweight HTTP web server on port `80`. Accessing the cam
 
 ## Over-The-Air (OTA) Update Guide
 
-This firmware supports wireless flashing via a background OTA thread communicating with a local server (e.g., your Next.js application on `192.168.4.204:3000`). 
+This firmware supports wireless flashing via a background OTA thread communicating with a local server (e.g., a Next.js application on `192.168.4.204:3000`). 
 
-### Part 1: Generating the OTA Binary (`.bin`) in Arduino IDE
-Before you can push an update over the air, you must compile your sketch into a raw `.bin` file.
+### Part 1: Generating & Locating the OTA Binary (`.bin`)
+Before you can push an update over the air, you must compile your sketch into a raw `.bin` file and isolate the correct application image.
 
-1.  **Open the Sketch:** Open your `.ino` file in the Arduino IDE.
-2.  **Verify Board Settings:** Go to **Tools > Board** and ensure `Ameba_AMB82-MINI` is selected.
-3.  **Export the Binary:** Go to the top menu and click **Sketch > Export compiled Binary** (Shortcut: `Ctrl+Alt+S` on Windows/Linux or `Cmd+Option+S` on Mac).
-4.  **Locate the File:** The IDE will compile the code and generate a `.bin` file. 
-    *   *Arduino IDE 1.x:* The file will appear directly inside your sketch folder alongside your `.ino` file.
-    *   *Arduino IDE 2.x:* The file will appear inside a newly created `build/` folder within your sketch directory.
-5.  **Stage the File:** Rename this `.bin` file (if your Next.js server requires a specific name like `firmware.bin`) and move it to the directory your OTA server uses to host updates.
+1.  **Compile:** Open your `.ino` file in the Arduino IDE, verify `Ameba_AMB82-MINI` is selected, and click **Sketch > Export compiled Binary** (`Ctrl+Alt+S`).
+2.  **Identify the Correct File:** The Realtek compiler generates several files. You specifically need **`firmware.bin`** (the isolated OTA application). 
+    *   **Do NOT use** `flash_ntz.bin` (this is the full USB flash image and will fail OTA).
+    *   **Do NOT use** the raw `.ino` text file (this will result in a ~10KB file and a checksum error).
+    *   The correct `firmware.bin` file will be approximately **1.5 MB to 2.5 MB** in size.
+3.  **Locate the File (Linux / Hidden Toolchain Cache):** If the Arduino IDE fails to output the `.bin` into your sketch folder or `build/` directory, it is still safely stored in the Realtek toolchain cache. Open your terminal and copy it directly using this command:
+    ```bash
+    cp ~/.arduino15/packages/realtek/tools/ameba_pro2_tools/1.4.7/firmware.bin ~/firmware.bin
+    ```
+4.  **Stage the File:** Move `firmware.bin` into the **`public/`** folder of your Next.js project. Ensure your server route resolves directly to the file download (e.g., test `http://<SERVER_IP>:3000/firmware.bin` in your browser to verify it downloads the 1.5MB+ file and not a 404 HTML page).
 
 ### Part 2: Pushing the OTA Update
 Because video streaming consumes significant DMA memory on the AMB82-Mini, you must free the hardware resources before pushing an update.
