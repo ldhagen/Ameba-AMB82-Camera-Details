@@ -25,16 +25,26 @@ The firmware hosts a lightweight HTTP web server on port `80`. Accessing the cam
 
 This firmware supports wireless flashing via a background OTA thread communicating with a local server (e.g., your Next.js application on `192.168.4.204:3000`). 
 
-Because video streaming consumes significant DMA memory on the AMB82-Mini, you must free the hardware resources before pushing an update.
+### Part 1: Generating the OTA Binary (`.bin`) in Arduino IDE
+Before you can push an update over the air, you must compile your sketch into a raw `.bin` file.
 
-### Step-by-Step OTA Process:
+1.  **Open the Sketch:** Open your `.ino` file in the Arduino IDE.
+2.  **Verify Board Settings:** Go to **Tools > Board** and ensure `Ameba_AMB82-MINI` is selected.
+3.  **Export the Binary:** Go to the top menu and click **Sketch > Export compiled Binary** (Shortcut: `Ctrl+Alt+S` on Windows/Linux or `Cmd+Option+S` on Mac).
+4.  **Locate the File:** The IDE will compile the code and generate a `.bin` file. 
+    *   *Arduino IDE 1.x:* The file will appear directly inside your sketch folder alongside your `.ino` file.
+    *   *Arduino IDE 2.x:* The file will appear inside a newly created `build/` folder within your sketch directory.
+5.  **Stage the File:** Rename this `.bin` file (if your Next.js server requires a specific name like `firmware.bin`) and move it to the directory your OTA server uses to host updates.
+
+### Part 2: Pushing the OTA Update
+Because video streaming consumes significant DMA memory on the AMB82-Mini, you must free the hardware resources before pushing an update.
 
 1.  **Open the Dashboard:** Navigate to the camera's IP address in your web browser.
 2.  **Prepare the Hardware:** Click the blue **Prepare for OTA** button. 
     *   *What this does:* This endpoint (`POST /ota-prep`) cleanly stops the RTSP server, terminates the active Frigate stream, and shuts down the video pipeline. The DMA memory is now completely cleared for the incoming binary.
 3.  **Push the Update:** Trigger the OTA deployment from your Next.js server UI.
 4.  **Wait for Reboot:** The camera will download the binary, flash it to memory, and automatically reboot. This takes approximately 10-15 seconds.
-5.  **Verify Success:** Refresh the camera's web dashboard. Look at the **Firmware** badge at the top of the page; the timestamp should exactly match the minute you compiled the new code in the Arduino IDE.
+5.  **Verify Success:** Refresh the camera's web dashboard. Look at the **Firmware** badge at the top of the page; the timestamp should exactly match the minute you exported the new binary from the Arduino IDE.
 
 ## Network Requirements & Tips
 
